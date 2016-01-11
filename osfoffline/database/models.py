@@ -67,7 +67,7 @@ class Node(Base):
 
     @property
     def rel_path(self):
-       	"""
+        """
         Path on the local filesystem.
 
         Recursively walk up the path of the node. Top level node joins with the osf folder path of the user
@@ -124,7 +124,9 @@ class File(Base):
     FOLDER = 'folder'
 
     id = Column(String, primary_key=True)
+    # File basename (as known on the OSF) and alias (as represented on the local filesystem)
     name = Column(String)
+    alias = Column(String)
 
     md5 = Column(String)
     sha256 = Column(String)
@@ -134,10 +136,6 @@ class File(Base):
     kind = Column(Enum(FOLDER, FILE), nullable=False)
     date_modified = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     provider = Column(String, nullable=False)
-
-    # NOTE: this is called path. It is not any type of file/folder path. Think of it just as an id.
-    osf_path = Column(String, nullable=True,
-                      default=None)  # todo: unique=True. (can't right now due to duplicates when moved on osf)
 
     user_id = Column(Integer, ForeignKey('user.id'), nullable=False)
     node_id = Column(Integer, ForeignKey('node.id'), nullable=False)
