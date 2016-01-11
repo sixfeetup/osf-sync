@@ -1,5 +1,7 @@
 import hashlib
 import os
+import re
+import sys
 
 from sqlalchemy.orm.exc import NoResultFound
 
@@ -35,6 +37,37 @@ def hash_file(path, *, chunk_size=65536):
                 break
             s.update(chunk)
     return s.hexdigest()
+
+
+def legal_filename(basename, parent=None):
+    """
+    Replace all OS-illegal characters in a filename with underscore, and return a new fn guaranteed to be unique
+        in that folder https://support.microsoft.com/en-us/kb/177506
+    :param str basename: The basename of a file, without path (eg 'is this a file and/or blob?.txt')
+    :param models.File parent: If provided, will verify that the new aliased name is unique in the
+        parent folder (or project osf storage folder). Two aliased names should not collide.
+    :return:
+    """
+    # TODO: After we handle filenames, explore whether project names can also have illegal characters
+    # TODO: Add a unit test!
+    if sys.platform in ('win32', 'cygwin'):
+        illegal_chars = r'\/:*?"<>|'
+        new_fn = re.sub(r'[{}]'.format(illegal_chars), '_', basename)
+        n = 1
+        while parent:
+            # If parent node is provided, loop through until a valid filename (not in use) is available
+            if Session().query(models.File.name).filter(models.File.alias == new_fn,
+                                                        models.File.parent == parent).all():
+                fn, ext_and_sep = os.path.splitext(new_fn)
+                new_fn = ''.join([fn, ' ({})'.format(n), ext_and_sep])
+                n += 1
+            else:
+                # If no filename collision detected, break loop and return value
+                break
+        return new_fn
+    else:
+        # If not windows, just let the filename pass as-is for now
+        return basename
 
 
 def extract_node(path):
