@@ -94,7 +94,7 @@ def local_to_db(local, node, *, is_folder=False, check_is_folder=True):
     parts = str(local).replace(node.path, '').split(os.path.sep)
     for part in parts:
         for child in db.children:
-            if child.name == part:
+            if child.safe_name == part:
                 db = child
     if db.path.rstrip(os.path.sep) != str(local).rstrip(os.path.sep) or (check_is_folder and db.is_folder != (local.is_dir() or is_folder)):
         return None
