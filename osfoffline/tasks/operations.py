@@ -96,6 +96,9 @@ class OperationContext:
 
 class BaseOperation(abc.ABC):
 
+    def __init__(self, context):
+        self._context = context
+
     @abc.abstractmethod
     def _run(self):
         """Internal implementation of run method; must be overridden in subclasses"""
@@ -107,9 +110,6 @@ class BaseOperation(abc.ABC):
         if not dry:
             return self._run()
         logger.info('Job successfully completed')
-
-    def __init__(self, context):  # TODO: Move
-        self._context = context
 
     @property
     def db(self):
@@ -134,9 +134,8 @@ class BaseOperation(abc.ABC):
 class MoveOperation(BaseOperation):
 
     def __init__(self, context, dest_context):
-        # TODO: Cleanup
-        self._context = context
         self._dest_context = dest_context
+        super().__init__(context)
 
 
 # Download File
