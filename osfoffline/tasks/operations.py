@@ -137,6 +137,8 @@ class MoveOperation(BaseOperation):
         self._dest_context = dest_context
         super().__init__(context)
 
+    def __repr__(self):
+        return '<{}(from {} to {})>'.format(self.__class__.__name__, self._context, self._dest_context)
 
 # Download File
 class LocalCreateFile(BaseOperation):
