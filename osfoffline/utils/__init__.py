@@ -39,7 +39,7 @@ def hash_file(path, *, chunk_size=65536):
     return s.hexdigest()
 
 
-def legal_filename(basename, parent=None):
+def legal_filename(basename, *, parent=None):
     """
     Replace all OS-illegal characters in a filename with underscore, and return a new fn guaranteed to be unique
         in that folder https://support.microsoft.com/en-us/kb/177506

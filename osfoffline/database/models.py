@@ -1,5 +1,5 @@
-import os
 import datetime
+import os
 
 from sqlalchemy import Column, Integer, Boolean, String, DateTime
 from sqlalchemy import ForeignKey, Enum
@@ -39,8 +39,8 @@ class Node(Base):
     # components will have sync = False. For all Nodes with sync = False there exists
     # some ancestor with sync = True.
     #
-    # TODO: If we plan to support syncing subsets of a project heirarchy it may be
-    # convienent to cast this to in Integer or Enum field with 3 accepted states:
+    # TODO: If we plan to support syncing subsets of a project hierarchy it may be
+    # convenient to cast this to in Integer or Enum field with 3 accepted states:
     # 1: Explicitly selected for sync
     # 0: Implicitly synced-- descendant of some explicitly synced Node
     # -1 (or 2 if we prefer unsigned): Explicitly ignored-- should have no children
@@ -126,7 +126,7 @@ class File(Base):
     id = Column(String, primary_key=True)
     # File basename (as known on the OSF) and alias (as represented on the local filesystem)
     name = Column(String)
-    alias = Column(String)
+    alias = Column(String, nullable=True)
 
     md5 = Column(String)
     sha256 = Column(String)
@@ -190,7 +190,9 @@ class File(Base):
         """
         # +os.path.sep+ instead of os.path.join: http://stackoverflow.com/a/14504695
         if self.parent:
-            return os.path.join(self.parent.rel_path, self.name) + (os.path.sep if self.is_folder else '')
+            # Use the alias if one is provided; otherwise use the basic filename
+            local_name = self.alias or self.name
+            return os.path.join(self.parent.rel_path, local_name) + (os.path.sep if self.is_folder else '')
         else:
             return os.path.join(self.node.rel_path, settings.OSF_STORAGE_FOLDER) + (os.path.sep if self.is_folder else '')
 

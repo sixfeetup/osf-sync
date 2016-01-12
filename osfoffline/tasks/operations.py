@@ -29,6 +29,8 @@ class OperationContext:
         self._remote = remote
         self._is_folder = is_folder
         self._check_is_folder = check_is_folder
+        # Platform-safe filename alias. False if unset, None (null) if no alias required
+        self._alias = False
 
     def __repr__(self):
         return '<{}(node={}, local={}, db={}, remote={})>'.format(self.__class__.__name__, self._node, self._local, self._db, self._remote)
@@ -78,6 +80,19 @@ class OperationContext:
             self._local = Path(self._db.path)
         return self._local
 
+    @property
+    def alias(self):
+        """Remove platform-specific bad characters from the filename if needed.
+            The alias field should be stored as null in the DB if the filename does not need to be transformed,
+            to minimize redundant data."""
+        if self._alias is False:
+            safe_name = utils.legal_filename(self.remote.name, parent=self.db.parent)
+            if safe_name != self.remote.name:
+                self._alias = safe_name
+            else:
+                self._alias = None
+        return self._alias
+
 
 class BaseOperation(abc.ABC):
 
@@ -93,7 +108,7 @@ class BaseOperation(abc.ABC):
             return self._run()
         logger.info('Job successfully completed')
 
-    def __init__(self, context):
+    def __init__(self, context):  # TODO: Move
         self._context = context
 
     @property
@@ -119,6 +134,7 @@ class BaseOperation(abc.ABC):
 class MoveOperation(BaseOperation):
 
     def __init__(self, context, dest_context):
+        # TODO: Cleanup
         self._context = context
         self._dest_context = dest_context
 
