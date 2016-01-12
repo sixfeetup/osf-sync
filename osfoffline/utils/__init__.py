@@ -42,7 +42,7 @@ def hash_file(path, *, chunk_size=65536):
 def legal_filename(basename, *, parent=None):
     """
     Replace all OS-illegal characters in a filename with underscore, and return a new fn guaranteed to be unique
-        in that folder https://support.microsoft.com/en-us/kb/177506
+        in that folder
     :param str basename: The basename of a file, without path (eg 'is this a file and/or blob?.txt')
     :param models.File parent: If provided, will verify that the new aliased name is unique in the
         parent folder (or project osf storage folder). Two aliased names should not collide.
@@ -51,6 +51,7 @@ def legal_filename(basename, *, parent=None):
     # TODO: After we handle filenames, explore whether project names can also have illegal characters
     # TODO: Add a unit test!
     if sys.platform in ('win32', 'cygwin'):
+        # https://support.microsoft.com/en-us/kb/177506
         illegal_chars = r'\/:*?"<>|'
         new_fn = re.sub(r'[{}]'.format(illegal_chars), '_', basename)
         n = 1
@@ -66,7 +67,7 @@ def legal_filename(basename, *, parent=None):
                 break
         return new_fn
     else:
-        # If not windows, just let the filename pass as-is for now
+        # If not windows, there are good practices, but no single source of rules. TODO: Revisit
         return basename
 
 

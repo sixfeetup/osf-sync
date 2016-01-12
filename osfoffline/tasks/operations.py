@@ -93,6 +93,12 @@ class OperationContext:
                 self._alias = None
         return self._alias
 
+    @property
+    def safe_name(self):
+        """Return the basename appropriate for local filesystem."""
+        # TODO: Implement options if remote is undefined (eg using db safe_name property)
+        return self.alias or self.remote.name
+
 
 class BaseOperation(abc.ABC):
 
@@ -127,6 +133,14 @@ class BaseOperation(abc.ABC):
     def node(self):
         return self._context.node
 
+    @property
+    def alias(self):
+        return self._context.alias
+
+    @property
+    def safe_name(self):
+        return self._context.safe_name
+
     def __repr__(self):
         return '<{}({})>'.format(self.__class__.__name__, self._context)
 
@@ -140,13 +154,14 @@ class MoveOperation(BaseOperation):
     def __repr__(self):
         return '<{}(from {} to {})>'.format(self.__class__.__name__, self._context, self._dest_context)
 
+
 # Download File
 class LocalCreateFile(BaseOperation):
     """Download an individual file from the OSF into a folder that already exists"""
 
     def _run(self):
         db_parent = Session().query(models.File).filter(models.File.id == self.remote.parent.id).one()
-        path = os.path.join(db_parent.path, self.remote.name)
+        path = os.path.join(db_parent.path, self.safe_name)
         # TODO: Create temp file in target directory while downloading, and rename when done. (check that no temp file exists)
         resp = OSFClient().request('GET', self.remote.raw['links']['download'], stream=True)
         with open(path, 'wb') as fobj:
@@ -170,7 +185,7 @@ class LocalCreateFolder(BaseOperation):
     def _run(self):
         db_parent = Session().query(models.File).filter(models.File.id == self.remote.parent.id).one()
         # TODO folder and file with same name
-        os.mkdir(os.path.join(db_parent.path, self.remote.name))
+        os.mkdir(os.path.join(db_parent.path, self.safe_name))
         DatabaseCreateFolder(
             OperationContext(remote=self.remote, node=self.node)
         ).run()
@@ -184,7 +199,7 @@ class LocalUpdateFile(BaseOperation):
     def _run(self):
         db_file = Session().query(models.File).filter(models.File.id == self.remote.id).one()
 
-        tmp_path = os.path.join(db_file.parent.path, '.~tmp.{}'.format(db_file.name))
+        tmp_path = os.path.join(db_file.parent.path, '.~tmp.{}'.format(db_file.safe_name))
 
         resp = OSFClient().request('GET', self.remote.raw['links']['download'], stream=True)
         with open(tmp_path, 'wb') as fobj:
@@ -196,7 +211,7 @@ class LocalUpdateFile(BaseOperation):
         DatabaseUpdateFile(
             OperationContext(db=db_file, remote=self.remote, node=db_file.node)
         ).run()
-        Notification().info('Updated File: {}'.format(self.remote.name))
+        Notification().info('Updated File: {}'.format(self.safe_name))
 
 
 class LocalDeleteFile(BaseOperation):
@@ -318,6 +333,7 @@ class DatabaseCreateFile(BaseOperation):
         save(Session(), models.File(
             id=self.remote.id,
             name=self.remote.name,
+            alias=self.alias,
             kind=self.remote.kind,
             provider=self.remote.provider,
             user=get_current_user(),
@@ -337,6 +353,7 @@ class DatabaseCreateFolder(BaseOperation):
         save(Session(), models.File(
             id=self.remote.id,
             name=self.remote.name,
+            alias=self.alias,
             kind=self.remote.kind,
             provider=self.remote.provider,
             user=get_current_user(),
@@ -351,6 +368,7 @@ class DatabaseUpdateFile(BaseOperation):
         parent = self.remote.parent.id if self.remote.parent else None
 
         self.db.name = self.remote.name
+        self.db.alias = self.alias
         self.db.kind = self.remote.kind
         self.db.provider = self.remote.provider
         self.db.user = get_current_user()
@@ -369,6 +387,7 @@ class DatabaseUpdateFolder(BaseOperation):
         parent = self.remote.parent.id if self.remote.parent else None
 
         self.db.name = self.remote.name
+        self.db.alias = self.alias
         self.db.kind = self.remote.kind
         self.db.provider = self.remote.provider
         self.db.user = get_current_user()

@@ -178,6 +178,11 @@ class File(Base):
         return self.id + '/' if self.is_folder else ''
 
     @property
+    def safe_name(self):
+        """Return the name on the local filesystem (same as remote name if no alias required)"""
+        return self.alias or self.name
+
+    @property
     def path(self):
         return self.rel_path.replace(self.node.rel_path, self.node.path)
 
@@ -190,9 +195,7 @@ class File(Base):
         """
         # +os.path.sep+ instead of os.path.join: http://stackoverflow.com/a/14504695
         if self.parent:
-            # Use the alias if one is provided; otherwise use the basic filename
-            local_name = self.alias or self.name
-            return os.path.join(self.parent.rel_path, local_name) + (os.path.sep if self.is_folder else '')
+            return os.path.join(self.parent.rel_path, self.safe_name) + (os.path.sep if self.is_folder else '')
         else:
             return os.path.join(self.node.rel_path, settings.OSF_STORAGE_FOLDER) + (os.path.sep if self.is_folder else '')
 
