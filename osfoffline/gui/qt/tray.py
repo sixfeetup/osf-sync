@@ -1,7 +1,7 @@
 import logging
 import os
-import threading
 from queue import Empty, Queue
+import threading
 
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import pyqtSignal
@@ -14,7 +14,6 @@ from PyQt5.QtWidgets import QApplication
 from PyQt5.QtWidgets import QFileDialog
 from PyQt5.QtWidgets import QSystemTrayIcon
 
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm.exc import NoResultFound
 
 from osfoffline.application.background import BackgroundHandler
