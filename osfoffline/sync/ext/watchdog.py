@@ -43,9 +43,16 @@ class ConsolidatedEventHandler(PatternMatchingEventHandler):
             if event.event_type == 'deleted':
                 consolidate = (parts in self._event_cache)
 
-            if event.is_directory and event.event_type == 'modified':
-                return
-
+            if event.event_type == 'modified':
+                if event.is_directory:
+                    return
+                move_events = [
+                    evt
+                    for evt in self._event_cache.children()
+                    if evt.event_type == 'moved' and evt.dest_path == event.src_path
+                ]
+                if move_events:
+                    return
             if event.event_type == 'created':
                 self._create_cache.append(event)
             else:
@@ -62,16 +69,21 @@ class ConsolidatedEventHandler(PatternMatchingEventHandler):
             logger.debug('Event cache: {}'.format(self._event_cache))
 
             self.timer.cancel()
-            self.timer = threading.Timer(2, self.flush)
+            self.timer = threading.Timer(settings.EVENT_DEBOUNCE, self.flush)
             self.timer.start()
+
+    def _sorted_create_cache(self):
+        return sorted(
+            self._create_cache,
+            key=lambda ev: len(Path(ev.src_path).parents)
+        )
 
     def flush(self):
         with self.lock:
             # Create events after all other types, and parent folder creation events happen before child files
             for event in itertools.chain(
                     self._event_cache.children(),
-                    sorted(self._create_cache,
-                           key=lambda ev: len(Path(ev.src_path).parents))
+                    self._sorted_create_cache(),
             ):
                 logger.debug('Watchdog event dispatched: {}'.format(event))
                 try:
