@@ -90,13 +90,26 @@ def extract_node(path):
 
 
 def local_to_db(local, node, *, is_folder=False, check_is_folder=True):
+    """
+    Fetch the database object associated with a given local file or folder path.
+
+    :param pathlib.Path local: A Path object representing the location of the local file on disk
+    :param models.Node node: The database instance representing the project
+    :param bool is_folder: Whether or not the database instance represents a folder
+    :param bool check_is_folder: Whether or not to validate the is_folder flag. The check must be suppressed in cases
+        such as a windows folder delete, where watchdog cannot provide an accurate value for `is_folder`
+    :return: The database object corresponding to the specified path object, or None if instance not found
+     :rtype: models.File or None
+    """
+    # Find the file by iterating over all children of the node's OSF storage folder (and their children etc)
     db = Session().query(models.File).filter(models.File.parent == None, models.File.node == node).one()  # noqa
     parts = str(local).replace(node.path, '').split(os.path.sep)
     for part in parts:
         for child in db.children:
             if child.safe_name == part:
                 db = child
-    if db.path.rstrip(os.path.sep) != str(local).rstrip(os.path.sep) or (check_is_folder and db.is_folder != (local.is_dir() or is_folder)):
+    if db.path.rstrip(os.path.sep) != str(local).rstrip(os.path.sep) or \
+            (check_is_folder and db.is_folder != (local.is_dir() or is_folder)):
         return None
     return db
 
