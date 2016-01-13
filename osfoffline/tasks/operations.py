@@ -82,11 +82,17 @@ class OperationContext:
 
     @property
     def alias(self):
-        """Remove platform-specific bad characters from the filename if needed.
+        """Remove platform-specific bad characters from the filename if needed. (requires remote data)
             The alias field should be stored as null in the DB if the filename does not need to be transformed,
             to minimize redundant data."""
+        if self.remote.name == 'osfstorage':
+            # If this event is for OSF Storage folder, no alias is required
+            return None
+
+        # Fetch parent object directly (will already exist even before self.db is defined, eg create events)
+        db_parent = Session().query(models.File).filter(models.File.id == self.remote.parent.id).one()
         if self._alias is False:
-            safe_name = utils.legal_filename(self.remote.name, parent=self.db.parent)
+            safe_name = utils.legal_filename(self.remote.name, parent=db_parent)
             if safe_name != self.remote.name:
                 self._alias = safe_name
             else:
