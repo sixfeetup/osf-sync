@@ -12,6 +12,12 @@ from osfoffline.exceptions import NodeNotFound
 from osfoffline.utils.authentication import get_current_user
 
 
+if sys.platform in ('win32', 'cygwin'):
+    ILLEGAL_FN_CHARS = re.compile(r'\/:*?"<>|')  # https://support.microsoft.com/en-us/kb/177506
+else:
+    ILLEGAL_FN_CHARS= re.compile(r'.^')  # Match nothing
+
+
 class Singleton(type):
     _instances = {}
 
@@ -39,7 +45,7 @@ def hash_file(path, *, chunk_size=65536):
     return s.hexdigest()
 
 
-def legal_filename(basename, *, parent=None):
+def legal_filename(basename, *, illegal_chars=ILLEGAL_FN_CHARS, parent=None):
     """
     Replace all OS-illegal characters in a filename with underscore, and return a new fn guaranteed to be unique
         in that folder
@@ -50,10 +56,12 @@ def legal_filename(basename, *, parent=None):
     """
     # TODO: After we handle filenames, explore whether project names can also have illegal characters
     # TODO: Add a unit test!
+    if isinstance(illegal_chars, str):
+        illegal_chars = re.compile('[{}]'.format(illegal_chars))
+
     if sys.platform in ('win32', 'cygwin'):
         # https://support.microsoft.com/en-us/kb/177506
-        illegal_chars = r'\/:*?"<>|'
-        new_fn = re.sub(r'[{}]'.format(illegal_chars), '_', basename)
+        new_fn = re.sub(illegal_chars, '_', basename)
         n = 1
         while parent:
             # If parent node is provided, loop through until a valid filename (not in use) is available
@@ -67,7 +75,8 @@ def legal_filename(basename, *, parent=None):
                 break
         return new_fn
     else:
-        # If not windows, there are good practices, but no single source of rules. TODO: Revisit
+        # If not windows, there are good practices, but no single source of rules. Don't alias the filename.
+        #  See eg https://support.apple.com/en-us/HT202808
         return basename
 
 
