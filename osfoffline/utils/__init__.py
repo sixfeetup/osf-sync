@@ -13,7 +13,7 @@ from osfoffline.utils.authentication import get_current_user
 
 
 if sys.platform in ('win32', 'cygwin'):
-    ILLEGAL_FN_CHARS = re.compile(r'\/:*?"<>|')  # https://support.microsoft.com/en-us/kb/177506
+    ILLEGAL_FN_CHARS = re.compile(r'[\/:*?"<>|]')  # https://support.microsoft.com/en-us/kb/177506
 else:
     ILLEGAL_FN_CHARS= re.compile(r'.^')  # Match nothing
 
