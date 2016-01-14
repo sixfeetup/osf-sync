@@ -215,6 +215,14 @@ class Auditor:
         return ret
 
     def _collect_node_remote(self, root, acc, rel_path, tpe):
+        """
+
+        :param client.osf.StorageObject root: Remote storage data
+        :param dict acc: A dictionary to which results will be added
+        :param str rel_path: Filesystem path from user folder to this item
+        :param ThreadPoolExecutor tpe:
+        :return:
+        """
         if root.parent:
             rel_path = os.path.join(rel_path, root.name)
 
