@@ -266,6 +266,13 @@ class Auditor:
         return ret
 
     def _collect_node_local(self, root, acc, db_map):
+        """
+
+        :param Path root: Represent the path of a given child node
+        :param dict acc: Stores results output by this function
+        :param dict db_map: DB data associated with various file paths
+        :return:
+        """
         rel_path = str(root).replace(self.user_folder, '') + os.path.sep
         acc[rel_path] = Audit(
             db_map.get(rel_path, NULL_AUDIT).fid,
