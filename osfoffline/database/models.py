@@ -204,7 +204,7 @@ class File(Base):
         #  TODO: DRY with rel_path
 
         if self.parent:
-            return os.path.join(self.parent.rel_path, self.name) + (os.path.sep if self.is_folder else '')
+            return os.path.join(self.parent.rel_path_unaliased, self.name) + (os.path.sep if self.is_folder else '')
         else:
             return os.path.join(self.node.rel_path, settings.OSF_STORAGE_FOLDER) + (os.path.sep if self.is_folder else '')
 

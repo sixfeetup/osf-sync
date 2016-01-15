@@ -34,7 +34,8 @@ class EventType(Enum):
 class ModificationEvent:
 
     def __init__(self, location, event_type, contexts, src_path, dest_path=None):
-        self.dest_path = dest_path or None  # Not every event will have a destination
+        if dest_path:
+            self.dest_path = dest_path
         self.location = location
         self.src_path = src_path
         self.event_type = event_type
@@ -72,16 +73,18 @@ class ModificationEvent:
 
 class Audit(object):
     """Store data about a file"""
-    def __init__(self, fid, sha256, fobj):
+    def __init__(self, fid, sha256, fobj, is_alias=False):
         """
         :param str fid: id of file object
         :param str sha256: sha256 of file object
         :param fobj: the local, db, or remote representation of a file object
          :type fobj: pathlib.Path or models.File or client.osf.StorageObject
+        :param bool is_alias: Whether or not this represents a file alias (duplicate entry for same file)
         """
         self.fid = fid
         self.sha256 = sha256
         self.fobj = fobj
+        self.is_alias = is_alias
 
     @property
     def info(self):
@@ -160,9 +163,13 @@ class Auditor:
             )
             res[entry.rel_path_unaliased] = audit
             if entry.alias is not None:
-                # Aliases are guaranteed to be unique, so this should not override any existing DB filenames
-                res[entry.rel_path] = audit
-
+                # Aliases are checked for uniqueness, so this entry shouldn't collide with any existing DB filenames
+                res[entry.rel_path] = Audit(
+                    entry.id,
+                    entry.sha256,
+                    entry,
+                    is_alias=True
+                )
         return res
 
     def collect_all_remote(self):
@@ -322,16 +329,24 @@ class Auditor:
     def _diff(self, source, target):
         # source == snapshot
         # target == ref
-        id_target = {v.fid: k for k, v in target.items()}
-        id_source = {v.fid: k for k, v in source.items()}
 
-        created = set(source.keys()) - set(target.keys())
-        deleted = set(target.keys()) - set(source.keys())
+        # Filter out any alias entries, as they are duplicates of something tracked under another name
+        id_source = {v.fid: k for k, v in source.items() if not v.is_alias}
+        id_target = {v.fid: k for k, v in target.items() if not v.is_alias}
 
-        for i in set(source.keys()) & set(target.keys()):
-            if source[i].fid != target[i].fid:
-                created.add(i)
-                deleted.add(i)
+        source_keys = set(k for k, v in source.items() if not v.is_alias)
+        target_keys = set(k for k, v in target.items() if not v.is_alias)
+
+        keys_in_both = source_keys & target_keys
+
+        created = source_keys - target_keys
+        deleted = target_keys - source_keys
+
+        for k in keys_in_both:
+            if source[k].fid != target[k].fid and target[k].is_alias:
+                # Track extra is a change, filtering out alias entries from db_map
+                created.add(k)
+                deleted.add(k)
 
         moved = set()
         for path in set(deleted):
@@ -347,7 +362,7 @@ class Auditor:
                 moved.add((id_target[fid], path))
 
         modified = set()
-        for path in set(target.keys()) & set(source.keys()):
+        for path in keys_in_both:
             if target[path].sha256 != source[path].sha256:
                 modified.add(path)
 
