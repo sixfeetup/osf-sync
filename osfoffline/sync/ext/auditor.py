@@ -34,8 +34,7 @@ class EventType(Enum):
 class ModificationEvent:
 
     def __init__(self, location, event_type, contexts, src_path, dest_path=None):
-        if dest_path:
-            self.dest_path = dest_path
+        self.dest_path = dest_path or None  # Not every event will have a destination
         self.location = location
         self.src_path = src_path
         self.event_type = event_type
@@ -66,6 +65,9 @@ class ModificationEvent:
 
     def __hash__(self):
         return hash(self.key)
+
+    def __repr__(self):
+        return '<{}({}): {}>'.format(self.__class__.__name__, self.event_type, self.context)
 
 
 class Audit(object):
