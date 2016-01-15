@@ -69,12 +69,13 @@ class ModificationEvent:
 
 
 class Audit(object):
-
+    """Store data about a file"""
     def __init__(self, fid, sha256, fobj):
         """
         :param str fid: id of file object
         :param str sha256: sha256 of file object
-        :param str fobj: the local, db, or remote representation of a file object
+        :param fobj: the local, db, or remote representation of a file object
+         :type fobj: pathlib.Path or models.File or client.osf.StorageObject
         """
         self.fid = fid
         self.sha256 = sha256
@@ -142,14 +143,25 @@ class Auditor:
         return modifications[Location.LOCAL], modifications[Location.REMOTE]
 
     def collect_all_db(self):
-        return {
-            entry.rel_path: Audit(
+        """Return {rel_path: Audit} pairs for every file known in the DB.
+
+        In order to compare local vs remote objects effectively (when the filename may be saved as an alias due to
+          OS limitations), db_map keys on both the actual path, and any aliases used for that file on the local
+          filesystem.
+        """
+        res = {}
+        for entry in Session().query(File):
+            audit = Audit(
                 entry.id,
                 entry.sha256,
                 entry
             )
-            for entry in Session().query(File)
-        }
+            res[entry.rel_path_unaliased] = audit
+            if entry.alias is not None:
+                # Aliases are guaranteed to be unique, so this should not override any existing DB filenames
+                res[entry.rel_path] = audit
+
+        return res
 
     def collect_all_remote(self):
         ret = {}
@@ -247,6 +259,11 @@ class Auditor:
         tpe._work_queue.task_done()
 
     def collect_all_local(self, db_map):
+        """
+        Collect data about all files in all nodes selected for sync
+        :param db_map:
+        :return: a dictionary of {rel_path: Audit} pairs for each file under a given node
+        """
         ret = {}
         for node in Session().query(Node).filter(Node.sync):
             node_path = Path(os.path.join(node.path, settings.OSF_STORAGE_FOLDER))
@@ -267,8 +284,9 @@ class Auditor:
 
     def _collect_node_local(self, root, acc, db_map):
         """
+        Return audit data about all files within a given node folder.
 
-        :param Path root: Represent the path of a given child node
+        :param Path root: Represent the path on disk of a given child node
         :param dict acc: Stores results output by this function
         :param dict db_map: DB data associated with various file paths
         :return:
@@ -288,8 +306,12 @@ class Auditor:
                 self._collect_node_local(child, acc, db_map)
             else:
                 rel_path = str(child).replace(self.user_folder, '')
+                db_entry = db_map.get(rel_path, NULL_AUDIT)
+                # Local file may be aliased. If there is a matching DB object, use that to key local file audits
+                #   on the original name, to facilitate comparison with remote files.
+                rel_path = db_entry.fobj.rel_path_unaliased if db_entry.fobj is not None else rel_path
                 acc[rel_path] = Audit(
-                    db_map.get(rel_path, NULL_AUDIT).fid,
+                    db_entry.fid,
                     hash_file(child),
                     rel_path
                 )

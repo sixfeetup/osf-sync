@@ -63,12 +63,13 @@ class Node(Base):
 
     @property
     def path(self):
+        """Path on the local filesystem, including the project"""
         return os.path.join(self.user.folder, self.rel_path)
 
     @property
     def rel_path(self):
         """
-        Path on the local filesystem.
+        Path on the local filesystem, relative to the parent
 
         Recursively walk up the path of the node. Top level node joins with the osf folder path of the user
         """
@@ -184,12 +185,33 @@ class File(Base):
 
     @property
     def path(self):
+        """
+        Local filesystem path to the file or folder
+        :return:
+        """
         return self.rel_path.replace(self.node.rel_path, self.node.path)
+
+    @property
+    def rel_path_unaliased(self):
+        """Represent the path (under the node) as it would appear remotely. Used by the auditor to compare remote
+        files with local files that are named under an alias"""
+        """
+        Local filesystem path to the file or folder.
+
+        Recursively walk up the path of the file/folder. Top level joins with the path of the containing node.
+        """
+        # +os.path.sep+ instead of os.path.join: http://stackoverflow.com/a/14504695
+        #  TODO: DRY with rel_path
+
+        if self.parent:
+            return os.path.join(self.parent.rel_path, self.name) + (os.path.sep if self.is_folder else '')
+        else:
+            return os.path.join(self.node.rel_path, settings.OSF_STORAGE_FOLDER) + (os.path.sep if self.is_folder else '')
 
     @property
     def rel_path(self):
         """
-        Local filesystem path to the file or folder.
+        Local filesystem path to the file or folder
 
         Recursively walk up the path of the file/folder. Top level joins with the path of the containing node.
         """
