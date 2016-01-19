@@ -61,13 +61,15 @@ def legal_filename(basename, *, illegal_chars=ILLEGAL_FN_CHARS, parent=None):
 
     if sys.platform in ('win32', 'cygwin'):
         # https://support.microsoft.com/en-us/kb/177506
-        new_fn = re.sub(illegal_chars, '_', basename)
+        base_new_fn = re.sub(illegal_chars, '_', basename)
+        new_fn = base_new_fn
         n = 1
         while parent:
-            # If parent node is provided, loop through until a valid filename (not in use) is available
+            # If parent node is provided, will check if the new alias filename is in use.
+            # Loop through and append '(n)' until a valid filename (not in use) is available
             if Session().query(models.File.name).filter(models.File.alias == new_fn,
                                                         models.File.parent == parent).all():
-                fn, ext_and_sep = os.path.splitext(new_fn)
+                fn, ext_and_sep = os.path.splitext(base_new_fn)
                 new_fn = ''.join([fn, ' ({})'.format(n), ext_and_sep])
                 n += 1
             else:
