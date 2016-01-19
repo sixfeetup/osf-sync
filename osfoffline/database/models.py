@@ -192,6 +192,11 @@ class File(Base):
         return self.rel_path.replace(self.node.rel_path, self.node.path)
 
     @property
+    def path_unaliased(self):
+        """Local filesystem path to the file or folder, without platform-safe aliasing of filenames"""
+        return self.rel_path_unaliased.replace(self.node.rel_path, self.node.path)
+
+    @property
     def rel_path_unaliased(self):
         """Represent the path (under the node) as it would appear remotely. Used by the auditor to compare remote
         files with local files that are named under an alias"""

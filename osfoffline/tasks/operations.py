@@ -460,7 +460,7 @@ class LocalMove(MoveOperation):
         # Construct a platform-safe path  alias (filename + parent folders),
         #  without aliasing the user or project part of the path
         db_parent = self._context.db.parent
-        path_to_alias = self._dest_context.local.relative_to(db_parent.path)
+        path_to_alias = self._dest_context.local.relative_to(db_parent.path_unaliased)
         safe_fn = utils.legal_filename(str(path_to_alias), parent=db_parent)
         safe_path = Path(db_parent.path).joinpath(safe_fn)
 
