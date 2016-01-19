@@ -457,7 +457,14 @@ class LocalMove(MoveOperation):
     DB_CLASS = None
 
     def _run(self):
-        shutil.move(str(self._context.db.path), str(self._dest_context.local))
+        # Construct a platform-safe path  alias (filename + parent folders),
+        #  without aliasing the user or project part of the path
+        db_parent = self._context.db.parent
+        path_to_alias = self._dest_context.local.relative_to(db_parent.path)
+        safe_fn = utils.legal_filename(str(path_to_alias), parent=db_parent)
+        safe_path = Path(db_parent.path).joinpath(safe_fn)
+
+        shutil.move(str(self._context.db.path), str(safe_path))
         self.DB_CLASS(
             OperationContext(
                 db=self._context.db,
