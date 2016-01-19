@@ -162,7 +162,8 @@ class Auditor:
                 entry
             )
             res[entry.rel_path_unaliased] = audit
-            if entry.alias is not None:
+            if entry.rel_path_unaliased != entry.rel_path:
+                # Even if a filename is not aliased, it may be part of a folder whose name is aliased
                 # Aliases are checked for uniqueness, so this entry shouldn't collide with any existing DB filenames
                 res[entry.rel_path] = Audit(
                     entry.id,
@@ -301,10 +302,12 @@ class Auditor:
         :return:
         """
         rel_path = str(root).replace(self.user_folder, '') + os.path.sep
-        acc[rel_path] = Audit(
-            db_map.get(rel_path, NULL_AUDIT).fid,
+        db_entry = db_map.get(rel_path, NULL_AUDIT)
+        path_key = db_entry.fobj.rel_path_unaliased if db_entry.fobj is not None else rel_path
+        acc[path_key] = Audit(
+            db_entry.fid,
             None,
-            rel_path
+            path_key
         )
 
         for child in root.iterdir():
@@ -318,11 +321,11 @@ class Auditor:
                 db_entry = db_map.get(rel_path, NULL_AUDIT)
                 # Local file may be aliased. If there is a matching DB object, use that to key local file audits
                 #   on the original name, to facilitate comparison with remote files.
-                rel_path = db_entry.fobj.rel_path_unaliased if db_entry.fobj is not None else rel_path
-                acc[rel_path] = Audit(
+                path_key = db_entry.fobj.rel_path_unaliased if db_entry.fobj is not None else rel_path
+                acc[path_key] = Audit(
                     db_entry.fid,
                     hash_file(child),
-                    rel_path
+                    path_key
                 )
         return acc
 
