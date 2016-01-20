@@ -121,6 +121,8 @@ def local_to_db(local, node, *, is_folder=False, check_is_folder=True):
                 db = child
     if db.path.rstrip(os.path.sep) != str(local).rstrip(os.path.sep) or \
             (check_is_folder and db.is_folder != (local.is_dir() or is_folder)):
+        # Verify that the DB object found matches the local path given, and is the same
+        #   file/folder type as what was requested. If not a match, return None
         return None
     return db
 
