@@ -25,19 +25,25 @@ class Singleton(type):
 
 def hash_file(path, *, chunk_size=65536):
     """
-    Return the SHA256 hash of a file
+    Return the SHA256 hash of a file or directory. For a directory, concatenate the names
+    for all immediate children and hash that.
 
     :param pathlib.Path path:
     :param int chunk_size: Read chunk size, in bytes
     :return:
     """
     s = hashlib.sha256()
-    with path.open(mode='rb') as f:
-        while True:
-            chunk = f.read(chunk_size)
-            if not chunk:
-                break
-            s.update(chunk)
+    if path.is_dir():
+        for child in sorted(path.iterdir()):
+            child_bytes = os.fsencode(child.name)
+            s.update(child_bytes)
+    else:
+        with path.open(mode='rb') as f:
+            while True:
+                chunk = f.read(chunk_size)
+                if not chunk:
+                    break
+                s.update(chunk)
     return s.hexdigest()
 
 

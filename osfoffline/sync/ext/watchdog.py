@@ -21,9 +21,6 @@ if sys.platform == 'win32':
 
 
 def sha256_from_event(event):
-    if event.is_directory:
-        return None
-
     try:
         node = utils.extract_node(event.src_path)
         db_file = utils.local_to_db(event.src_path, node, check_is_folder=False)
@@ -37,7 +34,7 @@ def sha256_from_event(event):
 
     try:
         return utils.hash_file(Path(getattr(event, 'dest_path', event.src_path)))
-    except (IsADirectoryError, PermissionError):
+    except PermissionError:
         return None
 
 
