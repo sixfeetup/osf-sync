@@ -34,7 +34,10 @@ def hash_file(path, *, chunk_size=65536):
     """
     s = hashlib.sha256()
     if path.is_dir():
-        for child in sorted(path.iterdir()):
+        children = sorted(path.iterdir())
+        if len(children) == 0:
+            s.update(bytes(path))
+        for child in children:
             child_bytes = os.fsencode(child.name)
             s.update(child_bytes)
     else:
