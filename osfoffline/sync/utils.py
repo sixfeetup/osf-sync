@@ -43,6 +43,8 @@ class EventConsolidator:
         deleted = set(self._initial.keys()) - set(self._final.keys())
         modified = set(i for i in self._pool.values() if i.modified and not i.is_folder)
 
+        import pdb; pdb.set_trace()
+		
         # Probably don't need both loops here but better safe than sorry
         # If an item has been created and deleted it is actuall a move
         for key in set(created):

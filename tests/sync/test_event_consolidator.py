@@ -38,342 +38,22 @@ def Event(type_, *src, sha=None):
 
 
 CASES = [{
-    'input': [Event('modify', '/Foo/bar/')],
-    'output': []
-}, {
-    'input': [Event('move', '/Foo/bar', '/Foo/baz')],
-    'output': [Event('move', '/Foo/bar', '/Foo/baz')]
-}, {
-    'input': [Event('move', '/Foo/bar/', '/Foo/baz/')],
-    'output': [Event('move', '/Foo/bar/', '/Foo/baz/')]
-}, {
-    'input': [
-        Event('move', '/Foo/bar/', '/Foo/baz/'),
-        Event('move', '/Foo/bar/file.txt', '/Foo/baz/file.txt')
-    ],
-    'output': [Event('move', '/Foo/bar/', '/Foo/baz/')]
-}, {
-    'input': [
-        Event('move', '/Foo/bar/file.txt', '/Foo/baz/file.txt'),
-        Event('move', '/Foo/bar/', '/Foo/baz/')
-    ],
-    'output': [Event('move', '/Foo/bar/', '/Foo/baz/')]
-}, {
-
-######## Consolidation for same events #########################
-    'input': [
-        Event('move', '/parent/', '/george/'),
-        Event('move', '/parent/child/', '/george/child/'),
-        Event('move', '/parent/file.txt', '/george/file.txt'),
-        Event('move', '/parent/child/file.txt', '/george/child/file.txt'),
-        Event('move', '/parent/child/grandchild/', '/george/child/grandchild/'),
-        Event('move', '/parent/child/grandchild/file.txt', '/george/child/grandchild/file.txt'),
-    ],
-    'output': [Event('move', '/parent/', '/george/')]
-}, {
-    'input': [
-        Event('move', '/parent/', '/george/'),
-        Event('move', '/parent/child/', '/george/child/'),
-        Event('move', '/parent/child/grandchild/', '/george/child/grandchild/'),
-    ],
-    'output': [Event('move', '/parent/', '/george/')]
-}, {
-    'input': [
-        Event('delete', '/parent/'),
-        Event('delete', '/parent/child/'),
-        Event('delete', '/parent/file.txt'),
-        Event('delete', '/parent/child/file.txt'),
-        Event('delete', '/parent/child/grandchild/'),
-        Event('delete', '/parent/child/grandchild/file.txt')
-    ],
-    'output': [Event('delete', '/parent/')]
-}, {
-    'input': [
-        Event('delete', '/parent/'),
-        Event('delete', '/parent/child/'),
-        Event('delete', '/parent/child/grandchild/'),
-    ],
-    'output': [Event('delete', '/parent/')]
-}, {
-
-######## Does not consolidate file events   #########################
-    'input': [
-        Event('create', '/parent/'),
-        Event('create', '/parent/file.txt'),
-    ],
-    'output': [
-        Event('create', '/parent/'),
-        Event('create', '/parent/file.txt'),
-    ],
-}, {
-    'input': [
-        Event('move', '/parent/file.txt', '/george/file.txt', sha=b'123'),
-        Event('move', '/parent/child/file.txt', '/george/child/file.txt', sha=b'456'),
-        Event('move', '/parent/child/grandchild/file.txt', '/george/child/grandchild/file.txt', sha=b'789'),
-    ],
-    'output': [
-        Event('move', '/parent/file.txt', '/george/file.txt'),
-        Event('move', '/parent/child/grandchild/file.txt', '/george/child/grandchild/file.txt'),
-        Event('move', '/parent/child/file.txt', '/george/child/file.txt'),
-    ]
-}, {
-    'input': [
-        Event('delete', '/parent/file.txt'),
-        Event('delete', '/parent/child/file.txt'),
-        Event('delete', '/parent/child/grandchild/file.txt')
-    ],
-    'output': [
-        Event('delete', '/parent/file.txt'),
-        Event('delete', '/parent/child/grandchild/file.txt'),
-        Event('delete', '/parent/child/file.txt'),
-    ],
-}, {
-
-######## Consolidation for differing events #########################
-    'input': [
-        Event('delete', '/file.txt'),
-        Event('create', '/file.txt'),
-    ],
-    # 'output': [Event('modify', '/file.txt')]
-    'output': [Event('create', '/file.txt')]
-}, {
-    'input': [
-        Event('delete', '/folder/'),
-        Event('create', '/folder/'),
-    ],
-    'output': [
-        # Event('delete', '/folder/'),
-        Event('create', '/folder/'),
-    ]
-}, {
-    'input': [
-        Event('modify', '/file.txt'),
-        Event('delete', '/file.txt'),
-    ],
-    'output': [
-        Event('delete', '/file.txt'),
-    ]
-}, {
-    'input': [
-        Event('create', '/file.txt'),
-        Event('delete', '/file.txt'),
-    ],
-    'output': []
-}, {
-    'input': [
-        Event('move', '/file.txt', '/other_file.txt'),
-        Event('delete', '/other_file.txt'),
-    ],
-    'output': [Event('delete', '/file.txt')]
-}, {
-    'input': [
-        Event('move', '/folder1/file.txt', '/folder1/other_file.txt'),
-        Event('delete', '/folder1/'),
-    ],
-    'output': [Event('delete', '/folder1/')]
-}, {
-    'input': [
-        Event('create', '/file.txt'),
-        Event('move', '/file.txt', '/other_file.txt'),
-        Event('delete', '/other_file.txt'),
-    ],
-    'output': []
-}, {
-    'input': [
-        Event('create', '/folder/'),
-        Event('create', '/folder/file.txt'),
-        Event('delete', '/folder/'),
-    ],
-    'output': []
-}, {
-    'input': [
-        Event('modify', '/parent/file.txt'),
-        Event('modify', '/parent/'),
-    ],
-    'output': [Event('modify', '/parent/file.txt')]
-}, {
-    'input': [
-        Event('create', '/file.txt'),
-        Event('move', '/file.txt', '/test.txt'),
-    ],
-    'output': [Event('create', '/test.txt')]
-}, {
-
-######## Weird cases Word/Vim/Tempfiles ############################
-    'input': [
-        Event('create', '/~WRL0001.tmp'),
-        Event('modify', '/~WRL0001.tmp'),
-        Event('move', '/file.docx', '/~WRL0005.tmp', sha=b'123'),
-        Event('move', '/~WRL0001.tmp', '/file.docx', sha=b'456'),
-        Event('delete', '/~WRL0005.tmp'),
-    ],
-    # 'output': [Event('modify', '/file.docx')],
-    'output': [Event('create', '/file.docx')],
-}, {
-    'input': [
-        Event('create', '/osfoffline.py'),
-        Event('modify', '/osfoffline.py'),
-    ],
-    'output': [Event('create', '/osfoffline.py')],
-}, {
-    'input': [
-        Event('modify', '/folder/donut.txt'),
-        Event('move', '/folder/donut.txt', '/test/donut.txt'),
-        Event('move', '/folder/', '/test/'),
-    ],
-    'output': [
-        Event('move', '/folder/', '/test/'),
-        Event('modify', '/test/donut.txt'),
-    ],
-}, {
-    'input': [
-        Event('move', '/folder/donut.txt', '/other_folder/bagel.txt', sha='1234'),
-        Event('move', '/folder/', '/test/'),
-    ],
-    'output': [
-        Event('move', '/folder/donut.txt', '/other_folder/bagel.txt'),
-        Event('move', '/folder/', '/test/'),
-    ],
-}, {
-    'input': [
-        Event('modify', '/donut.txt'),
-        Event('move', '/donut.txt', '/bagel.txt'),
-    ],
-    'output': [
-        Event('move', '/donut.txt', '/bagel.txt'),
-        Event('modify', '/bagel.txt'),
-    ],
-}, {
-
-########## Generate one offs just to be certain ####################
-    'input': [Event('modify', '/folder/donut.txt')],
-    'output': [Event('modify', '/folder/donut.txt')],
-}, {
-    'input': [Event('modify', '/folder/donut/')],
-    'output': [],
-}, {
-    'input': [Event('delete', '/folder/donut.txt')],
-    'output': [Event('delete', '/folder/donut.txt')],
-}, {
-    'input': [Event('delete', '/folder/donut/')],
-    'output': [Event('delete', '/folder/donut/')],
-}, {
-    'input': [Event('create', '/folder/donut.txt')],
-    'output': [Event('create', '/folder/donut.txt')],
-}, {
-    'input': [Event('create', '/folder/donut/')],
-    'output': [Event('create', '/folder/donut/')],
-}, {
-    'input': [
-        Event('create', '/bagel.txt', sha=b'123'),
-        Event('delete', '/donut.txt', sha=b'123'),
-    ],
-    'output': [Event('move', '/donut.txt', '/bagel.txt')]
-}, {
-    'input': [
-        Event('create', '/bagel.txt', sha=b'123'),
-        Event('delete', '/donut.txt', sha=b'123'),
-        Event('create', '/a/cake.txt', sha=b'456'),
-        Event('delete', '/a/cup.txt', sha=b'456'),
-        Event('create', '/a/b/shake.txt', sha=b'789'),
-        Event('delete', '/a/b/milk.txt', sha=b'789'),
-    ],
-    'output': [
-        Event('move', '/donut.txt', '/bagel.txt'),
-        Event('move', '/a/cup.txt', '/a/cake.txt'),
-        Event('move', '/a/b/milk.txt', '/a/b/shake.txt'),
-    ]
-}, {
-    'input': [
-        Event('create', '/untitled/'),
-        Event('move', '/untitled/', '/newfolder/'),
-        Event('move', '/donut.txt', '/newfolder/donut.txt'),
-        Event('move', '/bagel.txt', '/newfolder/bagel.txt'),
-    ],
-    'output': [
-        Event('create', '/newfolder/'),
-        Event('move', '/donut.txt', '/newfolder/donut.txt'),
-        Event('move', '/bagel.txt', '/newfolder/bagel.txt'),
-    ]
-}, {
-    'input': [
-        Event('create', '/untitled/'),
-        Event('move', '/untitled/', '/newfolder/'),
-        Event('move', '/child/', '/newfolder/child/'),
-    ],
-    'output': [
-        Event('create', '/newfolder/'),
-        Event('move', '/child/', '/newfolder/child/'),
-    ]
-}, {
-    'input': [
-        Event('create', '/parent/untitled/'),
-        Event('move', '/parent/untitled/', '/parent/newfolder/'),
-        Event('move', '/child/', '/parent/newfolder/child/'),
-    ],
-    'output': [
-        Event('create', '/parent/newfolder/'),
-        Event('move', '/child/', '/parent/newfolder/child/'),
-    ]
-}, {
     'input': [
         Event('move', '/untitled/', '/newfolder/'),
-        Event('move', '/donut.txt', '/newfolder/donut.txt'),
-        Event('move', '/bagel.txt', '/newfolder/bagel.txt'),
+        Event('move', '/donut002.txt', '/newfolder/donut002.txt'),
     ],
     'output': [
         Event('move', '/untitled/', '/newfolder/'),
-        Event('move', '/donut.txt', '/newfolder/donut.txt'),
-        Event('move', '/bagel.txt', '/newfolder/bagel.txt'),
-    ]
-}, {
-    'input': [
-        Event('move', '/untitled/', '/newfolder/'),
-        Event('delete', '/newfolder/')
-    ],
-    'output': [
-        Event('delete', '/untitled/'),
+        Event('move', '/donut002.txt', '/newfolder/donut002.txt'),
     ]
 }]
 
 
 # List of tests that can't be easily parsed by the integration tester
-UNIT_ONLY = [{
-    'input': [
-        Event('move', '/untitled/', '/newfolder/'),
-        Event('move', '/newfolder/otherfolder/', '/otherfolder/'),
-    ],
-    'output': [
-        Event('move', '/untitled/', '/newfolder/'),
-        Event('move', '/newfolder/otherfolder/', '/otherfolder/'),
-    ]
-}, {
-    'input': [
-        Event('create', '/untitled/'),
-        Event('move', '/untitled/', '/newfolder/'),
-        Event('move', '/untitled/file.txt', '/newfolder/file.txt', sha=b'123'),
-        Event('delete', '/file.txt', sha=b'123'),
-    ],
-    'output': [
-        Event('create', '/newfolder/'),
-        Event('move', '/file.txt', '/newfolder/file.txt'),
-    ]
-}]
+UNIT_ONLY = []
 
 
-TMP_CASES = [{
-    'input': [Event('create', '/~$file.txt')],
-    'output': []
-}, {
-    'input': [Event('move', '/myfile.txt', '/~$file.txt')],
-    'output': [Event('delete', '/myfile.txt')]
-}, {
-    'input': [Event('delete', '/file.tmp')],
-    'output': []
-}, {
-    'input': [Event('modify', '/.DS_Store')],
-    'output': []
-}]
+TMP_CASES = []
 
 
 CONTEXT_EVENT_MAP = {
@@ -387,34 +67,8 @@ CONTEXT_EVENT_MAP = {
 }
 
 
-class TestEventConsolidator:
 
-    @pytest.mark.parametrize('input, expected', [(case['input'], case['output']) for case in CASES + UNIT_ONLY])
-    def test_event_consolidator(self, input, expected):
-        consolidator = EventConsolidator(ignore=False)
-        for event in input:
-            consolidator.push(event)
-        assert list(consolidator.events) == list(expected)
 
-    def test_event_consolidator_windows_folder_delete(self):
-        input = [
-            Event('modify', 'parent'),
-            Event('delete', 'parent/child.txt'),
-            Event('delete', 'parent'),
-        ]
-        expected = [Event('delete', 'parent/')]
-
-        consolidator = EventConsolidator(ignore=False)
-        for event in input:
-            consolidator.push(event)
-        assert list(consolidator.events) == list(expected)
-
-    @pytest.mark.parametrize('input, expected', [(case['input'], case['output']) for case in TMP_CASES])
-    def test_event_consolidator_temp_files(self, input, expected):
-        consolidator = EventConsolidator()
-        for event in input:
-            consolidator.push(event)
-        assert list(consolidator.events) == list(expected)
 
 
 class TestObserver:
@@ -526,6 +180,7 @@ class TestObserver:
         observer._events = []
         observer.done.clear()
 
+        import pdb; pdb.set_trace()
         for event in input:
             self.perform(tmpdir, event)
 
