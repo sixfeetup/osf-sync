@@ -15,6 +15,9 @@ from osfoffline.utils.authentication import get_current_user
 IGNORE_RE = re.compile(r'.*{}({})'.format(re.escape(os.path.sep), '|'.join(settings.IGNORED_PATTERNS)))
 if sys.platform in ('win32', 'cygwin'):
     ILLEGAL_FN_CHARS = re.compile(r'[\/:*?"<>|]')  # https://support.microsoft.com/en-us/kb/177506
+elif sys.platform == 'darwin':
+    # TODO: adjust for APFS before it becomes the default in 2017
+    ILLEGAL_FN_CHARS = re.compile(r'[/:\x00]')  # https://support.apple.com/en-us/HT202808
 else:
     ILLEGAL_FN_CHARS = re.compile(r'.^')  # Match nothing
 
