@@ -63,8 +63,7 @@ def legal_filename(basename, *, illegal_chars=ILLEGAL_FN_CHARS, parent=None):
     if isinstance(illegal_chars, str):
         illegal_chars = re.compile('[{}]'.format(illegal_chars))
 
-    if sys.platform in ('win32', 'cygwin'):
-        # https://support.microsoft.com/en-us/kb/177506
+    if illegal_chars.search(basename):
         base_new_fn = re.sub(illegal_chars, '_', basename)
         new_fn = base_new_fn
         n = 1
@@ -81,8 +80,6 @@ def legal_filename(basename, *, illegal_chars=ILLEGAL_FN_CHARS, parent=None):
                 break
         return new_fn
     else:
-        # If not windows, there are good practices, but no single source of rules. Don't alias the filename.
-        #  See eg https://support.apple.com/en-us/HT202808
         return basename
 
 
