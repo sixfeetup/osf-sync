@@ -1,5 +1,5 @@
-import os
 import datetime
+import os
 
 from sqlalchemy import Column, Integer, Boolean, String, DateTime
 from sqlalchemy import ForeignKey, Enum
@@ -39,8 +39,8 @@ class Node(Base):
     # components will have sync = False. For all Nodes with sync = False there exists
     # some ancestor with sync = True.
     #
-    # TODO: If we plan to support syncing subsets of a project heirarchy it may be
-    # convienent to cast this to in Integer or Enum field with 3 accepted states:
+    # TODO: If we plan to support syncing subsets of a project hierarchy it may be
+    # convenient to cast this to in Integer or Enum field with 3 accepted states:
     # 1: Explicitly selected for sync
     # 0: Implicitly synced-- descendant of some explicitly synced Node
     # -1 (or 2 if we prefer unsigned): Explicitly ignored-- should have no children
@@ -63,6 +63,7 @@ class Node(Base):
 
     @property
     def path(self):
+        """Path on the local filesystem, including the project"""
         return os.path.join(self.user.folder, self.rel_path)
 
     @property
@@ -124,7 +125,9 @@ class File(Base):
     FOLDER = 'folder'
 
     id = Column(String, primary_key=True)
+    # File basename (as known on the OSF) and alias (as represented on the local filesystem)
     name = Column(String)
+    alias = Column(String, nullable=True)
 
     md5 = Column(String)
     sha256 = Column(String)
@@ -176,19 +179,50 @@ class File(Base):
         return self.id + ('/' if self.is_folder else '')
 
     @property
+    def safe_name(self):
+        """Return the name on the local filesystem (same as remote name if no alias required)"""
+        return self.alias or self.name
+
+    @property
     def path(self):
+        """
+        Local filesystem path to the file or folder
+        :return:
+        """
         return self.rel_path.replace(self.node.rel_path, self.node.path)
 
     @property
-    def rel_path(self):
+    def path_unaliased(self):
+        """Local filesystem path to the file or folder, without platform-safe aliasing of filenames"""
+        return self.rel_path_unaliased.replace(self.node.rel_path, self.node.path)
+
+    @property
+    def rel_path_unaliased(self):
+        """Represent the path (under the node) as it would appear remotely. Used by the auditor to compare remote
+        files with local files that are named under an alias"""
         """
         Local filesystem path to the file or folder.
 
         Recursively walk up the path of the file/folder. Top level joins with the path of the containing node.
         """
         # +os.path.sep+ instead of os.path.join: http://stackoverflow.com/a/14504695
+        #  TODO: DRY with rel_path
+
         if self.parent:
-            return os.path.join(self.parent.rel_path, self.name) + (os.path.sep if self.is_folder else '')
+            return os.path.join(self.parent.rel_path_unaliased, self.name) + (os.path.sep if self.is_folder else '')
+        else:
+            return os.path.join(self.node.rel_path, settings.OSF_STORAGE_FOLDER) + (os.path.sep if self.is_folder else '')
+
+    @property
+    def rel_path(self):
+        """
+        Local filesystem path to the file or folder
+
+        Recursively walk up the path of the file/folder. Top level joins with the path of the containing node.
+        """
+        # +os.path.sep+ instead of os.path.join: http://stackoverflow.com/a/14504695
+        if self.parent:
+            return os.path.join(self.parent.rel_path, self.safe_name) + (os.path.sep if self.is_folder else '')
         else:
             return os.path.join(self.node.rel_path, settings.OSF_STORAGE_FOLDER) + (os.path.sep if self.is_folder else '')
 

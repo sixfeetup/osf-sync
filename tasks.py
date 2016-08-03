@@ -18,7 +18,7 @@ def drop_log():
 
 @task(aliases=['flake8'])
 def flake():
-    run('flake8 osfoffline/', echo=True)
+    run('flake8 osfoffline/ tests/', echo=True)
 
 
 @task

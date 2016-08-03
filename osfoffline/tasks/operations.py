@@ -34,6 +34,8 @@ class OperationContext:
         self._remote = remote
         self._is_folder = is_folder
         self._check_is_folder = check_is_folder
+        # Platform-safe filename alias. False if unset, None (null) if no alias required
+        self._alias = False
 
     def __repr__(self):
         return '<{}(node={}, local={}, db={}, remote={})>'.format(self.__class__.__name__, self._node, self._local, self._db, self._remote)
@@ -84,8 +86,36 @@ class OperationContext:
             self._local = Path(self._db.path)
         return self._local
 
+    @property
+    def alias(self):
+        """Remove platform-specific bad characters from the filename if needed. (requires remote data)
+            The alias field should be stored as null in the DB if the filename does not need to be transformed,
+            to minimize redundant data."""
+        if self.remote.name == 'osfstorage':
+            # If this event is for OSF Storage folder, no alias is required
+            return None
+
+        # Fetch parent object directly (will already exist even before self.db is defined, eg create events)
+        db_parent = Session().query(models.File).filter(models.File.id == self.remote.parent.id).one()
+        if self._alias is False:
+            safe_name = utils.legal_filename(self.remote.name, parent=db_parent)
+            if safe_name != self.remote.name:
+                self._alias = safe_name
+            else:
+                self._alias = None
+        return self._alias
+
+    @property
+    def safe_name(self):
+        """Return the basename appropriate for local filesystem."""
+        # TODO: Implement options if remote is undefined (eg using db safe_name property)
+        return self.alias or self.remote.name
+
 
 class BaseOperation(abc.ABC):
+
+    def __init__(self, context):
+        self._context = context
 
     @abc.abstractmethod
     def _run(self):
@@ -98,9 +128,6 @@ class BaseOperation(abc.ABC):
         if not dry:
             return self._run()
         logger.info('Job successfully completed')
-
-    def __init__(self, context):
-        self._context = context
 
     @property
     def db(self):
@@ -118,6 +145,14 @@ class BaseOperation(abc.ABC):
     def node(self):
         return self._context.node
 
+    @property
+    def alias(self):
+        return self._context.alias
+
+    @property
+    def safe_name(self):
+        return self._context.safe_name
+
     def __repr__(self):
         return '<{}({})>'.format(self.__class__.__name__, self._context)
 
@@ -125,8 +160,11 @@ class BaseOperation(abc.ABC):
 class MoveOperation(BaseOperation):
 
     def __init__(self, context, dest_context):
-        self._context = context
         self._dest_context = dest_context
+        super().__init__(context)
+
+    def __repr__(self):
+        return '<{}(from {} to {})>'.format(self.__class__.__name__, self._context, self._dest_context)
 
 
 # Download File
@@ -136,7 +174,7 @@ class LocalCreateFile(BaseOperation):
     def _run(self):
         with Session() as session:
             db_parent = session.query(models.File).filter(models.File.id == self.remote.parent.id).one()
-        path = os.path.join(db_parent.path, self.remote.name)
+        path = os.path.join(db_parent.path, self.safe_name)
         # TODO: Create temp file in target directory while downloading, and rename when done. (check that no temp file exists)
         resp = OSFClient().request('GET', self.remote.raw['links']['download'], stream=True)
         with open(path, 'wb') as fobj:
@@ -161,7 +199,7 @@ class LocalCreateFolder(BaseOperation):
         with Session() as session:
             db_parent = session.query(models.File).filter(models.File.id == self.remote.parent.id).one()
         # TODO folder and file with same name
-        os.mkdir(os.path.join(db_parent.path, self.remote.name))
+        os.mkdir(os.path.join(db_parent.path, self.safe_name))
         DatabaseCreateFolder(
             OperationContext(remote=self.remote, node=self.node)
         ).run()
@@ -176,7 +214,7 @@ class LocalUpdateFile(BaseOperation):
         with Session() as session:
             db_file = session.query(models.File).filter(models.File.id == self.remote.id).one()
 
-        tmp_path = os.path.join(db_file.parent.path, '.~tmp.{}'.format(db_file.name))
+        tmp_path = os.path.join(db_file.parent.path, '.~tmp.{}'.format(db_file.safe_name))
 
         resp = OSFClient().request('GET', self.remote.raw['links']['download'], stream=True)
         with open(tmp_path, 'wb') as fobj:
@@ -329,6 +367,7 @@ class DatabaseCreateFile(BaseOperation):
             session.add(models.File(
                 id=self.remote.id,
                 name=self.remote.name,
+                alias=self.alias,
                 kind=self.remote.kind,
                 provider=self.remote.provider,
                 user=get_current_user(),
@@ -350,6 +389,7 @@ class DatabaseCreateFolder(BaseOperation):
             session.add(models.File(
                 id=self.remote.id,
                 name=self.remote.name,
+                alias=self.alias,
                 kind=self.remote.kind,
                 provider=self.remote.provider,
                 user=get_current_user(),
@@ -365,6 +405,7 @@ class DatabaseUpdateFile(BaseOperation):
         parent = self.remote.parent.id if self.remote.parent else None
 
         self.db.name = self.remote.name
+        self.db.alias = self.alias
         self.db.kind = self.remote.kind
         self.db.provider = self.remote.provider
         self.db.user = get_current_user()
@@ -385,6 +426,7 @@ class DatabaseUpdateFolder(BaseOperation):
         parent = self.remote.parent.id if self.remote.parent else None
 
         self.db.name = self.remote.name
+        self.db.alias = self.alias
         self.db.kind = self.remote.kind
         self.db.provider = self.remote.provider
         self.db.user = get_current_user()
@@ -468,7 +510,14 @@ class LocalMove(MoveOperation):
     DB_CLASS = None
 
     def _run(self):
-        shutil.move(str(self._context.db.path), str(self._dest_context.local))
+        # Construct a platform-safe path  alias (filename + parent folders),
+        #  without aliasing the user or project part of the path
+        db_parent = self._context.db.parent
+        path_to_alias = self._dest_context.local.relative_to(db_parent.path_unaliased)
+        safe_fn = utils.legal_filename(str(path_to_alias), parent=db_parent)
+        safe_path = Path(db_parent.path).joinpath(safe_fn)
+
+        shutil.move(str(self._context.db.path), str(safe_path))
         self.DB_CLASS(
             OperationContext(
                 db=self._context.db,

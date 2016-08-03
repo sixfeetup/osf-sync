@@ -1,6 +1,7 @@
 import re
 import hashlib
 import os
+import sys
 
 from sqlalchemy.orm.exc import NoResultFound
 
@@ -12,6 +13,10 @@ from osfoffline.utils.authentication import get_current_user
 
 
 IGNORE_RE = re.compile(r'.*{}({})'.format(re.escape(os.path.sep), '|'.join(settings.IGNORED_PATTERNS)))
+if sys.platform in ('win32', 'cygwin'):
+    ILLEGAL_FN_CHARS = re.compile(r'[\/:*?"<>|]')  # https://support.microsoft.com/en-us/kb/177506
+else:
+    ILLEGAL_FN_CHARS = re.compile(r'.^')  # Match nothing
 
 
 class Singleton(type):
@@ -41,6 +46,43 @@ def hash_file(path, *, chunk_size=65536):
     return s.hexdigest()
 
 
+def legal_filename(basename, *, illegal_chars=ILLEGAL_FN_CHARS, parent=None):
+    """
+    Replace all OS-illegal characters in a filename with underscore, and return a new fn guaranteed to be unique
+        in that folder
+    :param str basename: The basename of a file, without path (eg 'is this a file and/or blob?.txt')
+    :param models.File parent: If provided, will verify that the new aliased name is unique in the
+        parent folder (or project osf storage folder). Two aliased names should not collide.
+    :return:
+    """
+    # TODO: After we handle filenames, explore whether project names can also have illegal characters
+    # TODO: Add a unit test!
+    if isinstance(illegal_chars, str):
+        illegal_chars = re.compile('[{}]'.format(illegal_chars))
+
+    if sys.platform in ('win32', 'cygwin'):
+        # https://support.microsoft.com/en-us/kb/177506
+        base_new_fn = re.sub(illegal_chars, '_', basename)
+        new_fn = base_new_fn
+        n = 1
+        while parent:
+            # If parent node is provided, will check if the new alias filename is in use.
+            # Loop through and append '(n)' until a valid filename (not in use) is available
+            if Session().query(models.File.name).filter(models.File.alias == new_fn,
+                                                        models.File.parent == parent).all():
+                fn, ext_and_sep = os.path.splitext(base_new_fn)
+                new_fn = ''.join([fn, ' ({})'.format(n), ext_and_sep])
+                n += 1
+            else:
+                # If no filename collision detected, break loop and return value
+                break
+        return new_fn
+    else:
+        # If not windows, there are good practices, but no single source of rules. Don't alias the filename.
+        #  See eg https://support.apple.com/en-us/HT202808
+        return basename
+
+
 def extract_node(path):
     """Given a file path extract the node id and return the loaded Database object
     Visual, how this method works:
@@ -61,14 +103,29 @@ def extract_node(path):
 
 
 def local_to_db(local, node, *, is_folder=False, check_is_folder=True):
+    """
+    Fetch the database object associated with a given local file or folder path.
+
+    :param pathlib.Path local: A Path object representing the location of the local file on disk
+    :param models.Node node: The database instance representing the project
+    :param bool is_folder: Whether or not the database instance represents a folder
+    :param bool check_is_folder: Whether or not to validate the is_folder flag. The check must be suppressed in cases
+        such as a windows folder delete, where watchdog cannot provide an accurate value for `is_folder`
+    :return: The database object corresponding to the specified path object, or None if instance not found
+     :rtype: models.File or None
+    """
+    # Find the file by iterating over all children of the node's OSF storage folder (and their children etc)
     with Session() as session:
         db = session.query(models.File).filter(models.File.parent == None, models.File.node == node).one()  # noqa
     parts = str(local).replace(node.path, '').split(os.path.sep)
     for part in parts:
         for child in db.children:
-            if child.name == part:
+            if child.safe_name == part:
                 db = child
-    if db.path.rstrip(os.path.sep) != str(local).rstrip(os.path.sep) or (check_is_folder and db.is_folder != (local.is_dir() or is_folder)):
+    if db.path.rstrip(os.path.sep) != str(local).rstrip(os.path.sep) or \
+            (check_is_folder and db.is_folder != (local.is_dir() or is_folder)):
+        # Verify that the DB object found matches the local path given, and is the same
+        #   file/folder type as what was requested. If not a match, return None
         return None
     return db
 

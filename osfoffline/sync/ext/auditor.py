@@ -66,17 +66,24 @@ class ModificationEvent:
     def __hash__(self):
         return hash(self.key)
 
+    def __repr__(self):
+        return '<{}({}): {}>'.format(self.__class__.__name__, self.event_type, self.context)
+
 
 class Audit(object):
-    def __init__(self, fid, sha256, fobj):
+    """Store data about a file"""
+    def __init__(self, fid, sha256, fobj, is_alias=False):
         """
         :param str fid: id of file object
         :param str sha256: sha256 of file object
-        :param str fobj: the local, db, or remote representation of a file object
+        :param fobj: the local, db, or remote representation of a file object
+         :type fobj: pathlib.Path or models.File or client.osf.StorageObject
+        :param bool is_alias: Whether or not this represents a file alias (duplicate entry for same file)
         """
         self.fid = fid
         self.sha256 = sha256
         self.fobj = fobj
+        self.is_alias = is_alias
 
     @property
     def info(self):
@@ -144,6 +151,12 @@ class Auditor:
         return modifications[Location.LOCAL], modifications[Location.REMOTE]
 
     def collect_all_db(self):
+        """Return {rel_path: Audit} pairs for every file known in the DB.
+
+        In order to compare local vs remote objects effectively (when the filename may be saved as an alias due to
+          OS limitations), db_map keys on both the actual path, and any aliases used for that file on the local
+          filesystem.
+        """
         if self._unreachable:
             logger.warning('Not collecting database structure for unreachable nodes {}'.format(self._unreachable))
         with Session() as session:
@@ -151,6 +164,24 @@ class Auditor:
                 entry.rel_path: Audit(entry.id, entry.sha256, entry)
                 for entry in session.query(File).filter(~File.node_id.in_(self._unreachable))
             }
+        res = {}
+        for entry in Session().query(File):
+            audit = Audit(
+                entry.id,
+                entry.sha256,
+                entry
+            )
+            res[entry.rel_path_unaliased] = audit
+            if entry.rel_path_unaliased != entry.rel_path:
+                # Even if a filename is not aliased, it may be part of a folder whose name is aliased
+                # Aliases are checked for uniqueness, so this entry shouldn't collide with any existing DB filenames
+                res[entry.rel_path] = Audit(
+                    entry.id,
+                    entry.sha256,
+                    entry,
+                    is_alias=True
+                )
+        return res
 
     def collect_all_remote(self):
         ret = {}
@@ -215,6 +246,14 @@ class Auditor:
         return ret
 
     def _collect_node_remote(self, root, acc, rel_path, tpe):
+        """
+
+        :param client.osf.StorageObject root: Remote storage data
+        :param dict acc: A dictionary to which results will be added
+        :param str rel_path: Filesystem path from user folder to this item
+        :param ThreadPoolExecutor tpe:
+        :return:
+        """
         if root.parent:
             rel_path = os.path.join(rel_path, root.name)
 
@@ -239,6 +278,11 @@ class Auditor:
         tpe._work_queue.task_done()
 
     def collect_all_local(self, db_map):
+        """
+        Collect data about all files in all nodes selected for sync
+        :param db_map:
+        :return: a dictionary of {rel_path: Audit} pairs for each file under a given node
+        """
         ret = {}
         with Session() as session:
             nodes = session.query(Node).filter(Node.sync)
@@ -263,11 +307,21 @@ class Auditor:
         return ret
 
     def _collect_node_local(self, root, acc, db_map):
+        """
+        Return audit data about all files within a given node folder.
+
+        :param Path root: Represent the path on disk of a given child node
+        :param dict acc: Stores results output by this function
+        :param dict db_map: DB data associated with various file paths
+        :return:
+        """
         rel_path = str(root).replace(self.user_folder, '') + os.path.sep
-        acc[rel_path] = Audit(
-            db_map.get(rel_path, NULL_AUDIT).fid,
+        db_entry = db_map.get(rel_path, NULL_AUDIT)
+        path_key = db_entry.fobj.rel_path_unaliased if db_entry.fobj is not None else rel_path
+        acc[path_key] = Audit(
+            db_entry.fid,
             None,
-            rel_path
+            path_key
         )
 
         for child in root.iterdir():
@@ -278,26 +332,38 @@ class Auditor:
                 self._collect_node_local(child, acc, db_map)
             else:
                 rel_path = str(child).replace(self.user_folder, '')
-                acc[rel_path] = Audit(
-                    db_map.get(rel_path, NULL_AUDIT).fid,
+                db_entry = db_map.get(rel_path, NULL_AUDIT)
+                # Local file may be aliased. If there is a matching DB object, use that to key local file audits
+                #   on the original name, to facilitate comparison with remote files.
+                path_key = db_entry.fobj.rel_path_unaliased if db_entry.fobj is not None else rel_path
+                acc[path_key] = Audit(
+                    db_entry.fid,
                     hash_file(child),
-                    rel_path
+                    path_key
                 )
         return acc
 
     def _diff(self, source, target):
         # source == snapshot
         # target == ref
-        id_target = {v.fid: k for k, v in target.items()}
-        id_source = {v.fid: k for k, v in source.items()}
 
-        created = set(source.keys()) - set(target.keys())
-        deleted = set(target.keys()) - set(source.keys())
+        # Filter out any alias entries, as they are duplicates of something tracked under another name
+        id_source = {v.fid: k for k, v in source.items() if not v.is_alias}
+        id_target = {v.fid: k for k, v in target.items() if not v.is_alias}
 
-        for i in set(source.keys()) & set(target.keys()):
-            if source[i].fid != target[i].fid:
-                created.add(i)
-                deleted.add(i)
+        source_keys = set(k for k, v in source.items() if not v.is_alias)
+        target_keys = set(k for k, v in target.items() if not v.is_alias)
+
+        keys_in_both = source_keys & target_keys
+
+        created = source_keys - target_keys
+        deleted = target_keys - source_keys
+
+        for k in keys_in_both:
+            if source[k].fid != target[k].fid and target[k].is_alias:
+                # Track extra is a change, filtering out alias entries from db_map
+                created.add(k)
+                deleted.add(k)
 
         moved = set()
         for path in set(deleted):
@@ -313,7 +379,7 @@ class Auditor:
                 moved.add((id_target[fid], path))
 
         modified = set()
-        for path in set(target.keys()) & set(source.keys()):
+        for path in keys_in_both:
             if target[path].sha256 != source[path].sha256:
                 modified.add(path)
 
