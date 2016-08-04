@@ -17,6 +17,7 @@ from watchdog.events import (  # noqa
 )
 
 from osfoffline import settings
+from osfoffline.utils import legal_filename
 
 from tests.base import OSFOTestBase
 from tests.utils import unique_file_name, unique_folder_name
@@ -177,3 +178,11 @@ class TestConsolidatedEventHandler(OSFOTestBase):
         self.sync_worker.flushed.wait()
         assert len(self.sync_worker._event_cache.events) == 1, 'exactly one event captured'
         assert isinstance(self.sync_worker._event_cache.events[0], DirDeletedEvent) is True, 'the one captured event is a DirDeletedEvent'
+
+    def test_good_filename(self):
+        good_filename = 'innocuous.txt'
+        assert '_' not in legal_filename(good_filename)
+
+    def test_bad_filename(self):
+        bad_filename = r'This name should upset every \<:>/\x00 file system'
+        assert '_' in legal_filename(bad_filename)
