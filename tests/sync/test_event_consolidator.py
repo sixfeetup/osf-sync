@@ -345,7 +345,24 @@ CASES = [{
         Event('move', '/donut004.txt', '/newdir/donut004.txt'),
         Event('move', '/donut003.txt', '/newdir/donut003.txt'),
     ]
-}]
+},
+
+# Windows rename directory test
+{
+    'setup': [
+        Event('create', '/parent/'),
+        Event('create', '/parent/child/'),
+        Event('create', '/parent/child/donut005.txt'),
+    ],
+    'input': [
+        Event('move', '/parent/child/', '/child/'),
+    ],
+    'output': [
+        Event('move', '/parent/child/', '/child/'),
+    ]
+},
+
+]
 
 
 # List of tests that can't be easily parsed by the integration tester
@@ -448,8 +465,8 @@ class TestObserver:
         else:
             raise Exception(event)
 
-    @pytest.mark.parametrize('input, expected', [(case['input'], case['output']) for case in CASES])
-    def test_event_observer(self, monkeypatch, tmpdir, input, expected):
+    @pytest.mark.parametrize('setup, input, expected', [(case.get('setup'), case['input'], case['output']) for case in CASES])
+    def test_event_observer(self, monkeypatch, tmpdir, setup, input, expected):
         og_input = tuple(input)
         def local_to_db(local, node, *, is_folder=False, check_is_folder=True):
             found = False
@@ -531,6 +548,16 @@ class TestObserver:
         path.remove()
         observer.done.wait(5)
 
+        if setup:
+            # Reset the observer for the setup
+            observer.flush()
+            observer.expected = len(setup)
+            observer._events = []
+            observer.done.clear()
+
+            for event in setup:
+                self.perform(tmpdir, event)
+                
         # Reset the observer to its inital state
         observer.flush()
         observer.expected = len(expected)
